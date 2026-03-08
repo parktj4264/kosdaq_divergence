@@ -14,13 +14,13 @@ st.markdown("""
 # --- 데이터 로드 (Caching) ---
 # 캐시 키를 바꾸기 위해 함수명 변경 (강제 캐시 무효화 효과)
 @st.cache_data(ttl=3600*2, show_spinner=False)  
-def get_divergence_data():
+def get_divergence_data(start_date_str):
     from kosdaq150_divergence import get_kosdaq150_tickers
     from pykrx import stock
     from datetime import datetime
     
     end = datetime.now().strftime("%Y%m%d")
-    start = "20251101"
+    start = start_date_str
     
     tickers = get_kosdaq150_tickers()
     
@@ -97,13 +97,23 @@ def get_divergence_data():
 
 with st.sidebar:
     st.header("⚙️ 설정 / 도구")
+    
+    # 분석 시작일 선택기 추가
+    target_start_date = st.date_input(
+        "📅 분석 시작일", 
+        value=datetime(2025, 11, 1), 
+        max_value=datetime.today()
+    )
+    start_date_str = target_start_date.strftime("%Y%m%d")
+    
+    st.markdown("---")
     if st.button("🔄 캐시 지우기 및 다시 수집"):
         st.cache_data.clear()
         st.rerun()
 
 with st.spinner("KRX 데이터를 수집 중입니다... (최대 1~3분 소요)"):
     try:
-        data_dict, name_map, scores_df = get_divergence_data()
+        data_dict, name_map, scores_df = get_divergence_data(start_date_str)
     except Exception as e:
         st.error(f"데이터 로드 중 오류가 발생했습니다: {e}")
         st.stop()
@@ -120,10 +130,11 @@ col_left, col_right = st.columns([1, 1.2])
 
 with col_left:
     st.subheader("1. Divergence Map (전체 종목 분포)")
+    
     fig_scatter = plot_scatter(scores_sorted)
-    # Streamlit에 맞게 사이즈 조절
-    fig_scatter.update_layout(height=450, width=None, margin=dict(t=30, b=0, l=0, r=0))
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    # 잘못 눌렀을 때의 확대를 막기 위해 기본 드래그 모드를 'pan(이동)'으로 제한
+    fig_scatter.update_layout(dragmode="pan", height=450, width=None, margin=dict(t=30, b=0, l=0, r=0))
+    st.plotly_chart(fig_scatter, use_container_width=True, config={'displayModeBar': True})
 
     st.subheader("2. 종목 순위 및 검색")
     
@@ -158,6 +169,14 @@ with col_left:
 with col_right:
     st.subheader("3. 선택 종목 상세 대시보드")
     
+    col_dash1, col_dash2 = st.columns([1, 1])
+    with col_dash1:
+        st.markdown("💡 차트 더블 클릭시 화면 줌이 **초기화**됩니다.")
+    with col_dash2:
+        # 이 버튼을 누르면 Streamlit이 화면을 아예 새로고침하여 줌을 리셋합니다
+        if st.button("차트 크기 원래대로 (Reset)", use_container_width=True):
+            pass # rerun automatically happens on button click
+    
     # 이벤트에서 선택된 행 가져오기
     selected_rows = event.selection.rows
     
@@ -172,16 +191,17 @@ with col_right:
             selected_ticker = divergence_candidates.iloc[0]["종목코드"]
         else:
             selected_ticker = scores_sorted.iloc[0]["종목코드"]
-        st.info("💡 표에서 종목을 선택하지 않아 기본 Divergence 1위 종목을 표시합니다.")
 
     target_name = name_map.get(selected_ticker, selected_ticker)
     
     with st.spinner(f"{target_name} 렌더링 중..."):
         fig_dashboard = plot_dashboard(selected_ticker, data_dict, name_map)
-        # Streamlit 레이아웃에 맞게 폭/높이 조정 (꽉 채우기)
+        
+        # 잘못된 확대 스크롤/드래그 방지를 위해 기본 dragmode를 pan으로 변경
         fig_dashboard.update_layout(
+            dragmode="pan",
             height=850, 
             width=None,
             margin=dict(t=50, b=30, l=0, r=0)
         )
-        st.plotly_chart(fig_dashboard, use_container_width=True)
+        st.plotly_chart(fig_dashboard, use_container_width=True, config={'displayModeBar': True})
