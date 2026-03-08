@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 from kosdaq150_divergence import fetch_data, compute_scores, plot_scatter, plot_dashboard
 
 st.set_page_config(layout="wide", page_title="KOSDAQ 150 Divergence Dashboard")
